@@ -1,0 +1,45 @@
+{
+    "name": "ngyuki/silverdust",
+    "description": "Simple database fixture generator",
+    "type": "library",
+    "keywords": [ "database", "fixture" ],
+    "homepage": "https://github.com/ngyuki/php-silverdust",
+    "license": "MIT",
+    "authors": [
+        { "name": "ngyuki", "email": "ngyuki.jp@gmail.com" }
+    ],
+    "config": {
+        "platform": {
+            "php": "7.0.10"
+        }
+    },
+    "require": {
+        "php": "^7.0.10",
+        "ext-pdo": "*",
+        "doctrine/dbal": "^2.5"
+    },
+    "require-dev": {
+        "ngyuki/phpunit-functions": "^1.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "ngyuki\\Silverdust\\": "src/"
+        }
+    },
+    "scripts": {
+        "test": [
+            "phpunit --colors=always"
+        ],
+        "cs": [
+            "php-cs-fixer fix --diff --dry-run --ansi -v"
+        ],
+        "phan": [
+            "phan --color -p"
+        ],
+        "qa": [
+            "@composer test",
+            "@composer cs",
+            "@composer phan"
+        ]
+    }
+}
