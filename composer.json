@@ -31,6 +31,9 @@
         "test": [
             "phpunit --colors=always"
         ],
+        "coverage": [
+            "phpdbg -qrr /usr/local/bin/phpunit --colors=always --coverage-html=build/"
+        ],
         "cs": [
             "php-cs-fixer fix --diff --dry-run --ansi -v"
         ],
