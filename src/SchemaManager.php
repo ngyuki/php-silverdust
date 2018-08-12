@@ -4,6 +4,7 @@ namespace ngyuki\Silverdust;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Schema\Column;
 use Doctrine\DBAL\Schema\Index;
+use Psr\SimpleCache\CacheInterface;
 
 class SchemaManager
 {
@@ -12,17 +13,38 @@ class SchemaManager
      */
     private $conn;
 
-    private $columns = [];
+    /**
+     * @var array
+     */
+    private $cache1st = [];
 
-    private $indexes = [];
+    /**
+     * @var CacheInterface
+     */
+    private $cache2nd;
 
-    private $foreignKeys = [];
-
-    private $referenceTables;
-
-    public function __construct(Connection $connection)
+    public function __construct(Connection $connection, CacheInterface $cache = null)
     {
         $this->conn = $connection;
+        $this->cache2nd = $cache;
+    }
+
+    private function cache($name, $args, $func)
+    {
+        $name = $name . '.' . implode('.', $args);
+        if (!array_key_exists($name, $this->cache1st)) {
+            if ($this->cache2nd && $this->cache2nd->has($name)) {
+                $val = $this->cache2nd->get($name);
+            } else {
+                /* @phan-suppress-next-line PhanParamTooMany */
+                $val = $func(...$args);
+                if ($this->cache2nd) {
+                    $this->cache2nd->set($name, $val);
+                }
+            }
+            $this->cache1st[$name] = $val;
+        }
+        return $this->cache1st[$name];
     }
 
     /**
@@ -31,10 +53,9 @@ class SchemaManager
      */
     public function columns(string $table): array
     {
-        if (!isset($this->columns[$table])) {
-            $this->columns[$table] = $this->conn->getSchemaManager()->listTableColumns($table);
-        }
-        return $this->columns[$table];
+        return $this->cache(__FUNCTION__, func_get_args(), function ($table) {
+            return $this->conn->getSchemaManager()->listTableColumns($table);
+        });
     }
 
     /**
@@ -43,7 +64,9 @@ class SchemaManager
      */
     public function indexes(string $table)
     {
-        return $this->conn->getSchemaManager()->listTableIndexes($table);
+        return $this->cache(__FUNCTION__, func_get_args(), function ($table) {
+            return $this->conn->getSchemaManager()->listTableIndexes($table);
+        });
     }
 
     /**
@@ -52,31 +75,34 @@ class SchemaManager
      */
     public function foreignKeys(string $table): array
     {
-        if (!isset($this->foreignKeys[$table])) {
-            $this->foreignKeys[$table] = [];
+        return $this->cache(__FUNCTION__, func_get_args(), function ($table) {
+            $ret = [];
             $list = $this->conn->getSchemaManager()->listTableForeignKeys($table);
             foreach ($list as $fkey) {
-                $this->foreignKeys[$table][] = [
-                    $fkey->getForeignTableName(),
-                    array_combine($fkey->getLocalColumns(), $fkey->getForeignColumns())
-                ];
+                $referenceColumns = array_combine($fkey->getLocalColumns(), $fkey->getForeignColumns());
+                $ret[] = [$fkey->getForeignTableName(), $referenceColumns];
             }
-        }
-        return $this->foreignKeys[$table];
+            return $ret;
+        });
     }
 
     public function referenceTables(string $table)
     {
-        if ($this->referenceTables === null) {
-            $this->referenceTables = [];
+        return $this->referenceAllTables()[$table] ?? [];
+    }
+
+    private function referenceAllTables()
+    {
+        return $this->cache(__FUNCTION__, func_get_args(), function () {
+            $ret = [];
             $sm = $this->conn->getSchemaManager();
             foreach ($sm->listTableNames() as $local) {
                 foreach ($sm->listTableForeignKeys($local) as $fkey) {
-                    $this->referenceTables[$fkey->getForeignTableName()][] = $local;
+                    $ret[$fkey->getForeignTableName()][] = $local;
                 }
             }
-        }
-        return $this->referenceTables[$table] ?? [];
+            return $ret;
+        });
     }
 
     public function rsort(array $tables)

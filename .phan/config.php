@@ -7,6 +7,7 @@ return [
     'directory_list' => [
         'src/',
         'vendor/doctrine/dbal/',
+        'vendor/psr/simple-cache/src/',
     ],
 
     'exclude_file_regex' => '@^vendor/.*/(tests|Tests|test|Test)/@',

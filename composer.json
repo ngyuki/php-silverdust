@@ -16,7 +16,8 @@
     "require": {
         "php": "^7.0.10",
         "ext-pdo": "*",
-        "doctrine/dbal": "^2.5"
+        "doctrine/dbal": "^2.5",
+        "psr/simple-cache": "^1.0"
     },
     "require-dev": {
         "ngyuki/phpunit-functions": "^1.0"

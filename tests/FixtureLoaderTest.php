@@ -40,7 +40,7 @@ class FixtureLoaderTest extends AbstractTestCase
             ALTER TABLE ccc ADD FOREIGN KEY (a_id, b_id) REFERENCES bbb (a_id, b_id);
         ');
 
-        $loader = (new FixtureLoaderBuilder($this->conn()))->create();
+        $loader = (new FixtureLoaderBuilder($this->conn(), new Cache()))->create();
         $loader->load([
             'aaa' => [
                 [ 'name' => 'ore' ],
@@ -72,7 +72,6 @@ class FixtureLoaderTest extends AbstractTestCase
 
         ///
 
-        $loader = (new FixtureLoaderBuilder($this->conn()))->create();
         $loader->reset([
             'aaa',
         ]);
@@ -106,7 +105,7 @@ class FixtureLoaderTest extends AbstractTestCase
           ALTER TABLE t_user ADD FOREIGN KEY (aa, bb) REFERENCES t_group (aa, bb);
         ');
 
-        $loader = (new FixtureLoaderBuilder($this->conn()))->create();
+        $loader = (new FixtureLoaderBuilder($this->conn(), new Cache()))->create();
         $loader->load([
             't_user'  => [
                 [],
@@ -170,7 +169,7 @@ class FixtureLoaderTest extends AbstractTestCase
             )
         ');
 
-        $loader = (new FixtureLoaderBuilder($this->conn()))->create();
+        $loader = (new FixtureLoaderBuilder($this->conn(), new Cache()))->create();
         $loader->load([
             't_user'  => [
                 [],
