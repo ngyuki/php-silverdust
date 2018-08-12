@@ -107,7 +107,7 @@ class Query
     {
         $q = $this->conn->createQueryBuilder()->select('*')->from($this->conn->quoteIdentifier($table));
         foreach ($values as $name => $value) {
-            $q->where($this->conn->quoteIdentifier($name), $this->conn->quote($value));
+            $q->andWhere($q->expr()->eq($this->conn->quoteIdentifier($name), $this->conn->quote($value)));
         }
         return $q->setMaxResults(1)->execute()->fetch(\PDO::FETCH_ASSOC) ?: null;
     }

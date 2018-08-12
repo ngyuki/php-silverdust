@@ -182,4 +182,37 @@ class FixtureLoaderTest extends AbstractTestCase
         assertNotEmpty($rows);
         $this->printWhenSingle($rows);
     }
+
+    /**
+     * @test
+     */
+    public function existing_row()
+    {
+        self::exec('
+            DROP TABLE IF EXISTS t_user;
+            DROP TABLE IF EXISTS t_group;
+            CREATE TABLE t_group (
+                gid INT NOT NULL PRIMARY KEY
+            );
+            INSERT INTO t_group VALUES (100);
+            CREATE TABLE t_user (
+                id INT NOT NULL PRIMARY KEY,
+                gid INT NOT NULL
+            );
+            ALTER TABLE t_user ADD FOREIGN KEY (gid) REFERENCES t_group (gid);
+        ');
+
+        $loader = (new FixtureLoaderBuilder($this->conn(), new Cache()))->create();
+        $loader->load([
+            't_user'  => [
+                [ 'gid' => 200 ],
+            ],
+        ]);
+
+        $rows = $this->all('t_group');
+        assertThat(array_column($rows, 'gid'), equalTo([100, 200]));
+
+        $rows = $this->all('t_user');
+        assertThat(array_column($rows, 'gid'), equalTo([200]));
+    }
 }
