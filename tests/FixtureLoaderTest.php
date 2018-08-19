@@ -5,6 +5,16 @@ use ngyuki\Silverdust\FixtureLoaderBuilder;
 
 class FixtureLoaderTest extends AbstractTestCase
 {
+    protected function setUp()
+    {
+        $conn = self::conn();
+        $conn->exec('SET FOREIGN_KEY_CHECKS=0');
+        foreach ($conn->getSchemaManager()->listTableNames() as $table) {
+            $conn->getSchemaManager()->dropTable($table);
+        }
+        $conn->exec('SET FOREIGN_KEY_CHECKS=1');
+    }
+
     /**
      * @test
      */
