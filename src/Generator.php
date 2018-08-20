@@ -28,10 +28,15 @@ class Generator
     {
         $this->tables = $this->schema->krsort($tables);
 
-        foreach ($this->tables as $table => $_) {
-            foreach ($this->tables[$table] as $index => $row) {
+        foreach ($this->tables as $table => $rows) {
+            foreach ($rows as $index => $row) {
                 $this->tables[$table][$index] = $row = Row::create($row);
                 $row->entity = true;
+            }
+        }
+
+        foreach ($this->tables as $table => $rows) {
+            foreach ($rows as $index => $row) {
                 $this->generateRow($table, $row);
             }
         }
@@ -42,32 +47,57 @@ class Generator
         return array_reverse($this->schema->krsort($tables), true);
     }
 
-    private function generateRow(string $table, Row $row)
+    private function generateRow(string $table, Row $row): Row
     {
-        $foreignKeys = $this->schema->foreignKeys($table);
-        foreach ($foreignKeys as list($foreignTable, $references)) {
-            $this->generateByForeignKey($table, $row, $foreignTable, $references);
+        if ($row->generated) {
+            return $row;
         }
+        $row->generated = true;
+
+        $foreignKeys = $this->schema->foreignKeys($table);
+
+        $foreignTables = [];
+        foreach ($foreignKeys as list($foreignTable)) {
+            $foreignTables[$foreignTable] = $foreignTable;
+        }
+
+        $through = [];
+        $row->filter(function ($val, $key) use (&$through) {
+            $arr = explode('.', $key, 2);
+            if (count($arr) !== 2) {
+                return true;
+            }
+            list ($throughTable, $throughColumn) = $arr;
+            $through[$throughTable][$throughColumn] = $val;
+            return false;
+        });
+
+        foreach ($foreignKeys as list($foreignTable, $references)) {
+            $this->generateByForeignKey($table, $row, $foreignTable, $references, $through[$foreignTable] ?? []);
+        }
+        return $row;
     }
 
-    private function generateByForeignKey(string $table, Row $row, string $foreignTable, array $references): Row
+    private function generateByForeignKey(string $table, Row $row, string $foreignTable, array $references, array $through): Row
     {
-        $nullable = false;
-        $columns = $this->schema->columns($table);
-        foreach ($references as $local => $foreign) {
-            if ($row->has($local)) {
-                if ($row[$local] === null) {
-                    $nullable = true;
-                }
-            } else {
-                if (!$columns[$local]->getNotnull()) {
-                    $row[$local] = null;
-                    $nullable = true;
+        if (!$through) {
+            $nullable = false;
+            $columns = $this->schema->columns($table);
+            foreach ($references as $local => $foreign) {
+                if ($row->has($local)) {
+                    if ($row[$local] === null) {
+                        $nullable = true;
+                    }
+                } else {
+                    if (!$columns[$local]->getNotnull()) {
+                        $row[$local] = null;
+                        $nullable = true;
+                    }
                 }
             }
-        }
-        if ($nullable) {
-            return $row;
+            if ($nullable) {
+                return $row;
+            }
         }
 
         $foreignRow = [];
@@ -76,8 +106,14 @@ class Generator
                 $foreignRow[$foreign] = $row[$local];
             }
         }
+        $foreignRow += $through;
 
-        $foreignRow = $this->ensureRow($foreignTable, $foreignRow);
+        if ($through) {
+            $this->tables[$foreignTable][] = $foreignRow = $this->generateRow($foreignTable, Row::create($foreignRow));
+        } else {
+            $foreignRow = $this->ensureRow($foreignTable, $foreignRow);
+        }
+
         foreach ($references as $local => $foreign) {
             if (!$row->has($local)) {
                 $row[$local] = new ForeignValue($foreignRow, $foreign);
@@ -96,7 +132,7 @@ class Generator
     {
         foreach ($this->tables[$table] ?? [] as $index => $row) {
             $ok = true;
-            $row = Row::create($row);
+            assert($row instanceof Row);
             foreach ($values as $name => $value) {
                 if ($row->has($name) && $value != $row[$name]) {
                     $ok = false;
@@ -104,10 +140,10 @@ class Generator
                 }
             }
             if ($ok) {
-                return $this->tables[$table][$index] = $row->assign($values);
+                return $row->assign($values);
             }
         }
 
-        return $this->tables[$table][] = Row::create($values);
+        return $this->tables[$table][] = $this->generateRow($table, Row::create($values));
     }
 }

@@ -21,10 +21,6 @@ class FixtureLoaderTest extends AbstractTestCase
     public function load_reset()
     {
         self::exec('
-            DROP TABLE IF EXISTS ccc;
-            DROP TABLE IF EXISTS bbb;
-            DROP TABLE IF EXISTS aaa;
-
             CREATE TABLE aaa (
                 a_id INT NOT NULL,
                 name VARCHAR (255) NOT NULL,
@@ -247,5 +243,68 @@ class FixtureLoaderTest extends AbstractTestCase
 
         $rows = $this->all('t_user');
         assertCount(3, $rows);
+    }
+
+
+    /**
+     * @test
+     */
+    public function through_row()
+    {
+        self::exec('
+            CREATE TABLE aaa (
+                a_id INT NOT NULL,
+                name VARCHAR (255) NOT NULL,
+                PRIMARY KEY (a_id)
+            );
+
+            CREATE TABLE bbb (
+                a_id INT NOT NULL,
+                b_id INT NOT NULL,
+                name VARCHAR (255) NOT NULL,
+                PRIMARY KEY (a_id, b_id)
+            );
+
+            CREATE TABLE ccc (
+                a_id INT NOT NULL,
+                b_id INT NOT NULL,
+                c_id INT NOT NULL,
+                name VARCHAR (255) NOT NULL,
+                PRIMARY KEY (a_id, b_id, c_id)
+            );
+
+            ALTER TABLE bbb ADD FOREIGN KEY (a_id) REFERENCES aaa (a_id);
+            ALTER TABLE ccc ADD FOREIGN KEY (a_id, b_id) REFERENCES bbb (a_id, b_id);
+        ');
+
+        $loader = (new FixtureLoaderBuilder($this->conn(), new Cache()))->create();
+        $loader->load([
+            'ccc'  => [
+                [
+                    'bbb.a_id' => 111,
+                    'bbb.aaa.name' => 'A1',
+                ],
+                [
+                    'bbb.a_id' => 222,
+                    'bbb.aaa.name' => 'A2',
+                ],
+                [
+                    'bbb.a_id' => 111,
+                    'bbb.aaa.name' => 'A1',
+                ],
+            ],
+        ]);
+
+        $rows = $this->all('aaa');
+        assertNotEmpty($rows);
+        $this->printWhenSingle($rows);
+
+        $rows = $this->all('bbb');
+        assertNotEmpty($rows);
+        $this->printWhenSingle($rows);
+
+        $rows = $this->all('ccc');
+        assertNotEmpty($rows);
+        $this->printWhenSingle($rows);
     }
 }
