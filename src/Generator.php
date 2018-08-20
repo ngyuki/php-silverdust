@@ -1,9 +1,6 @@
 <?php
 namespace ngyuki\Silverdust;
 
-use Doctrine\DBAL\Schema\Column;
-use ngyuki\Silverdust\Value\ValueFactory;
-
 class Generator
 {
     /**
@@ -33,7 +30,9 @@ class Generator
 
         foreach ($this->tables as $table => $_) {
             foreach ($this->tables[$table] as $index => $row) {
-                $this->tables[$table][$index] = $this->generateRow($table, $row);
+                $this->tables[$table][$index] = $row = Row::create($row);
+                $row->entity = true;
+                $this->generateRow($table, $row);
             }
         }
 
@@ -43,45 +42,45 @@ class Generator
         return array_reverse($this->schema->krsort($tables), true);
     }
 
-    private function generateRow(string $table, array $row)
+    private function generateRow(string $table, Row $row)
     {
         $foreignKeys = $this->schema->foreignKeys($table);
-        foreach ($foreignKeys as list($foreignTable, $referenceColumns)) {
-            $row = $this->generateByForeignKey($table, $row, $foreignTable, $referenceColumns);
+        foreach ($foreignKeys as list($foreignTable, $references)) {
+            $this->generateByForeignKey($table, $row, $foreignTable, $references);
         }
-        $columns = $this->schema->columns($table);
-        foreach ($columns as $name => $column) {
-            if (!array_key_exists($name, $row)) {
-                $row[$name] = $this->generateValue($column);
-            }
-        }
-        return $row;
     }
 
-    private function generateByForeignKey(string $table, array $row, string $foreignTable, array $referenceColumns)
+    private function generateByForeignKey(string $table, Row $row, string $foreignTable, array $references): Row
     {
-        $foreignRow = [];
-        foreach ($referenceColumns as $local => $foreign) {
-            if (array_key_exists($local, $row)) {
+        $nullable = false;
+        $columns = $this->schema->columns($table);
+        foreach ($references as $local => $foreign) {
+            if ($row->has($local)) {
                 if ($row[$local] === null) {
-                    return $row;
+                    $nullable = true;
                 }
+            } else {
+                if (!$columns[$local]->getNotnull()) {
+                    $row[$local] = null;
+                    $nullable = true;
+                }
+            }
+        }
+        if ($nullable) {
+            return $row;
+        }
+
+        $foreignRow = [];
+        foreach ($references as $local => $foreign) {
+            if ($row->has($local) && is_scalar($row[$local])) {
                 $foreignRow[$foreign] = $row[$local];
             }
         }
-        $columns = $this->schema->columns($table);
-        foreach ($referenceColumns as $local => $foreign) {
-            if (!array_key_exists($local, $row)) {
-                if (!$columns[$local]->getNotnull()) {
-                    $row[$local] = null;
-                    return $row;
-                }
-            }
-        }
+
         $foreignRow = $this->ensureRow($foreignTable, $foreignRow);
-        if ($foreignRow) {
-            foreach ($referenceColumns as $local => $foreign) {
-                $row[$local] = $foreignRow[$foreign];
+        foreach ($references as $local => $foreign) {
+            if (!$row->has($local)) {
+                $row[$local] = new ForeignValue($foreignRow, $foreign);
             }
         }
         return $row;
@@ -91,49 +90,24 @@ class Generator
      * @param string $table
      * @param array $values
      *
-     * @return array
+     * @return Row
      */
-    private function ensureRow(string $table, array $values): array
+    private function ensureRow(string $table, array $values): Row
     {
-        $rows = [];
         foreach ($this->tables[$table] ?? [] as $index => $row) {
             $ok = true;
+            $row = Row::create($row);
             foreach ($values as $name => $value) {
-                if (array_key_exists($name, $row) && $value != $row[$name]) {
+                if ($row->has($name) && $value != $row[$name]) {
                     $ok = false;
                     break;
                 }
             }
             if ($ok) {
-                $rows[$index] = $row;
-                break;
+                return $this->tables[$table][$index] = $row->assign($values);
             }
         }
 
-        if ($rows) {
-            $index = key($rows);
-        } elseif ($row = $this->query->fetch($table, $values)) {
-            return $row;
-        } else {
-            $this->tables[$table][] = [];
-            end($this->tables[$table]);
-            $index = key($this->tables[$table]);
-        }
-
-        $this->tables[$table][$index] += $values;
-        if (array_diff_key($this->schema->columns($table), $this->tables[$table][$index])) {
-            $this->tables[$table][$index] = $this->generateRow($table, $this->tables[$table][$index]);
-        }
-
-        return $this->tables[$table][$index];
-    }
-
-    private function generateValue(Column $column)
-    {
-        if (!$column->getNotnull()) {
-            return null;
-        }
-        $v = new ValueFactory();
-        return $v->value($column);
+        return $this->tables[$table][] = Row::create($values);
     }
 }

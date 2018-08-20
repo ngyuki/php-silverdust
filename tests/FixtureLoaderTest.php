@@ -225,4 +225,27 @@ class FixtureLoaderTest extends AbstractTestCase
         $rows = $this->all('t_user');
         assertThat(array_column($rows, 'gid'), equalTo([200]));
     }
+
+    /**
+     * @test
+     */
+    public function multi_row()
+    {
+        self::exec('
+            DROP TABLE IF EXISTS t_user;
+            CREATE TABLE t_user (
+                id INT NOT NULL PRIMARY KEY
+            );
+        ');
+
+        $loader = (new FixtureLoaderBuilder($this->conn(), new Cache()))->create();
+        $loader->load([
+            't_user'  => [
+                [],[],[]
+            ],
+        ]);
+
+        $rows = $this->all('t_user');
+        assertCount(3, $rows);
+    }
 }
