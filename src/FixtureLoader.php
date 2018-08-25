@@ -44,8 +44,9 @@ class FixtureLoader
             $columns = $this->schema->columns($table);
             foreach ($rows as $index => $row) {
                 $row = Row::create($row);
+                assert($row instanceof Row);
 
-                $row->map(function ($v) {
+                $row->map(function ($v, /** @noinspection PhpUnusedParameterInspection */ $k) {
                     if ($v instanceof ForeignValue) {
                         return $v->value();
                     }

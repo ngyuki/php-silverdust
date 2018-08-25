@@ -67,7 +67,7 @@ class Generator
             if (count($arr) !== 2) {
                 return true;
             }
-            list ($throughTable, $throughColumn) = $arr;
+            list($throughTable, $throughColumn) = $arr;
             $through[$throughTable][$throughColumn] = $val;
             return false;
         });
