@@ -3,7 +3,7 @@
     "description": "Simple database fixture generator",
     "type": "library",
     "keywords": [ "database", "fixture" ],
-    "homepage": "https://github.com/ngyuki/php-silverdust",
+    "homepage": "https://github.com/ngyuki/silverdust",
     "license": "MIT",
     "authors": [
         { "name": "ngyuki", "email": "ngyuki.jp@gmail.com" }
