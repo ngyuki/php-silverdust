@@ -307,4 +307,32 @@ class FixtureLoaderTest extends AbstractTestCase
         assertNotEmpty($rows);
         $this->printWhenSingle($rows);
     }
+
+    /**
+     * @test
+     */
+    public function longblob()
+    {
+        self::exec('
+            CREATE TABLE aaa (
+                id INT NOT NULL,
+                data LONGBLOB NOT NULL,
+                PRIMARY KEY (id)
+            );
+        ');
+
+        $loader = (new FixtureLoaderBuilder($this->conn(), new Cache()))->create();
+        $loader->load([
+            'aaa'  => [
+                [],
+                [
+                    'data' => 'xxx',
+                ],
+            ],
+        ]);
+
+        $rows = $this->all('aaa');
+        assertCount(2, $rows);
+        $this->printWhenSingle($rows);
+    }
 }
