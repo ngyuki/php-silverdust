@@ -38,6 +38,7 @@ class ValueFactory
 
         $args = self::GENERATOR_MAPPING[$name];
         $class = array_shift($args);
+        assert(is_string($class));
         assert(is_subclass_of($class, ValueInterface::class));
 
         $obj = new $class(...$args);

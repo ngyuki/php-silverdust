@@ -36,7 +36,7 @@ class SchemaManager
             if ($this->cache2nd && $this->cache2nd->has($name)) {
                 $val = $this->cache2nd->get($name);
             } else {
-                /* @phan-suppress-next-line PhanParamTooMany */
+                /* @phan-suppress-next-line PhanParamTooManyUnpack */
                 $val = $func(...$args);
                 if ($this->cache2nd) {
                     $this->cache2nd->set($name, $val);
