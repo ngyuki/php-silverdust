@@ -335,4 +335,67 @@ class FixtureLoaderTest extends AbstractTestCase
         assertCount(2, $rows);
         $this->printWhenSingle($rows);
     }
+
+    /**
+     * @test
+     */
+    public function foreign_foreign_key_bug()
+    {
+        self::exec("
+            CREATE TABLE aaa (
+                a_id INT NOT NULL,
+                str VARCHAR(10) NOT NULL,
+                PRIMARY KEY (a_id)
+            );
+            CREATE TABLE bbb (
+                b_id INT NOT NULL,
+                a_id INT,
+                str VARCHAR(10) NOT NULL,
+                PRIMARY KEY (b_id),
+                FOREIGN KEY (a_id) REFERENCES aaa (a_id)
+            );
+            CREATE TABLE ccc (
+                c_id INT NOT NULL,
+                a_id INT,
+                b_id INT,
+                PRIMARY KEY (c_id),
+                FOREIGN KEY (a_id) REFERENCES aaa (a_id),
+                FOREIGN KEY (b_id) REFERENCES bbb (b_id)
+            );
+            INSERT aaa VALUES (10, 'X');
+            INSERT bbb VALUES (100, 10, 'A');
+        ");
+
+        $loader = (new FixtureLoaderBuilder($this->conn(), new Cache()))->create();
+        $loader->load([
+            'ccc'  => [
+                [
+                    'a_id' => 10,
+                    'b_id' => 100,
+                ],
+                [
+                    'a_id' => 20,
+                    'b_id' => 200,
+                ],
+            ],
+        ]);
+
+        $rows = $this->all('aaa', ['a_id']);
+        assertThat($rows, equalTo(array_replace_recursive($rows, [
+            [ 'a_id' => 10, 'str' => 'X' ],
+            [ 'a_id' => 20 ],
+        ])));
+
+        $rows = $this->all('bbb', ['b_id']);
+        assertThat($rows, equalTo(array_replace_recursive($rows, [
+            [ 'b_id' => 100, 'a_id' => 10, 'str' => 'A' ],
+            [ 'b_id' => 200, 'a_id' => null ],
+        ])));
+
+        $rows = $this->all('ccc', ['a_id', 'b_id']);
+        assertThat($rows, equalTo(array_replace_recursive($rows, [
+            [ 'a_id' => 10, 'b_id' => 100 ],
+            [ 'a_id' => 20, 'b_id' => 200 ],
+        ])));
+    }
 }

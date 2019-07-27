@@ -85,12 +85,13 @@ class Generator
             $columns = $this->schema->columns($table);
             foreach ($references as $local => $foreign) {
                 if ($row->has($local)) {
+                    // ローカル側の外部キー参照元の値に NULL が指定されているなら参照先の行は生成不要
                     if ($row[$local] === null) {
                         $nullable = true;
                     }
                 } else {
+                    // ローカル側の外部キー参照元の列が NULL 許可なら参照先の行は生成不要
                     if (!$columns[$local]->getNotnull()) {
-                        $row[$local] = null;
                         $nullable = true;
                     }
                 }

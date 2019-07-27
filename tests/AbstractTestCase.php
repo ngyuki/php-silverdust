@@ -55,12 +55,18 @@ abstract class AbstractTestCase extends TestCase
         }
     }
 
-    protected static function all($table)
+    protected static function all($table, array $orders = [])
     {
-        return ($conn = self::conn())->createQueryBuilder()
+        $q = ($conn = self::conn())->createQueryBuilder()
             ->select('*')
-            ->from($conn->quoteIdentifier($table))
-            ->execute()
-            ->fetchAll(\PDO::FETCH_ASSOC);
+            ->from($conn->quoteIdentifier($table));
+
+        if ($orders) {
+            foreach ($orders as $orderBy) {
+                $q = $q->orderBy($orderBy);
+            }
+        }
+
+        return $q->execute()->fetchAll(\PDO::FETCH_ASSOC);
     }
 }
