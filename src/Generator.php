@@ -31,13 +31,12 @@ class Generator
         foreach ($this->tables as $table => $rows) {
             foreach ($rows as $index => $row) {
                 $this->tables[$table][$index] = $row = Row::create($row);
-                $row->entity = true;
             }
         }
 
         foreach ($this->tables as $table => $rows) {
             foreach ($rows as $index => $row) {
-                $this->generateRow($table, $row);
+                $this->generateRow($table, $row, true);
             }
         }
 
@@ -47,12 +46,21 @@ class Generator
         return array_reverse($this->schema->krsort($tables), true);
     }
 
-    private function generateRow(string $table, Row $row): Row
+    private function generateRow(string $table, Row $row, bool $entry = false): Row
     {
         if ($row->generated) {
             return $row;
         }
         $row->generated = true;
+
+        if (!$row->through && !$entry) {
+            $found = $this->query->fetch($table, $row->toArray());
+            if ($found) {
+                $row->exists = $found;
+                $row->assign($found);
+                return $row;
+            }
+        }
 
         $foreignKeys = $this->schema->foreignKeys($table);
 
@@ -61,32 +69,15 @@ class Generator
             $foreignTables[$foreignTable] = $foreignTable;
         }
 
-        $through = [];
-        $row->filter(function ($val, $key) use (&$through) {
-            $arr = explode('.', $key, 2);
-            if (count($arr) !== 2) {
-                return true;
-            }
-            list($throughTable, $throughColumn) = $arr;
-            $through[$throughTable][$throughColumn] = $val;
-            return false;
-        });
-
-        if ($foreignKeys && !$through && !$row->entity) {
-            $found = $this->query->fetch($table, $row->toArray());
-            if ($found) {
-                $row->exists = $found;
-                return $row;
-            }
-        }
         foreach ($foreignKeys as list($foreignTable, $references)) {
-            $this->generateByForeignKey($table, $row, $foreignTable, $references, $through[$foreignTable] ?? []);
+            $this->generateByForeignKey($table, $row, $foreignTable, $references);
         }
         return $row;
     }
 
-    private function generateByForeignKey(string $table, Row $row, string $foreignTable, array $references, array $through): Row
+    private function generateByForeignKey(string $table, Row $row, string $foreignTable, array $references): Row
     {
+        $through = $row->through[$foreignTable] ?? [];
         if (!$through) {
             $nullable = false;
             $columns = $this->schema->columns($table);
@@ -108,18 +99,24 @@ class Generator
             }
         }
 
-        $foreignRow = [];
+        $foreignValues = [];
         foreach ($references as $local => $foreign) {
             if ($row->has($local) && is_scalar($row[$local])) {
-                $foreignRow[$foreign] = $row[$local];
+                $foreignValues[$foreign] = $row[$local];
             }
         }
-        $foreignRow += $through;
+        $foreignValues += $through;
 
-        if ($through) {
-            $this->tables[$foreignTable][] = $foreignRow = $this->generateRow($foreignTable, Row::create($foreignRow));
-        } else {
-            $foreignRow = $this->ensureRow($foreignTable, $foreignRow);
+        $foreignRow = null;
+        if (!$through) {
+            $foreignRow = $this->findOnMemory($foreignTable, $foreignValues);
+            if ($foreignRow) {
+                $foreignRow = $foreignRow->assign($foreignValues);
+            }
+        }
+        if ($foreignRow === null) {
+            $foreignRow = $this->generateRow($foreignTable, Row::create($foreignValues));
+            $this->tables[$foreignTable][] = $foreignRow;
         }
 
         foreach ($references as $local => $foreign) {
@@ -134,9 +131,9 @@ class Generator
      * @param string $table
      * @param array $values
      *
-     * @return Row
+     * @return Row|null
      */
-    private function ensureRow(string $table, array $values): Row
+    private function findOnMemory(string $table, array $values)
     {
         foreach ($this->tables[$table] ?? [] as $index => $row) {
             $ok = true;
@@ -148,10 +145,9 @@ class Generator
                 }
             }
             if ($ok) {
-                return $row->assign($values);
+                return $row;
             }
         }
-
-        return $this->tables[$table][] = $this->generateRow($table, Row::create($values));
+        return null;
     }
 }

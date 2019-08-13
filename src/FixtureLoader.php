@@ -57,14 +57,6 @@ class FixtureLoader
                     return $v;
                 });
 
-                if (!$row->entity) {
-                    $found = $this->query->fetch($table, $row->toArray());
-                    if ($found) {
-                        $row->assign($found);
-                        continue;
-                    }
-                }
-
                 foreach ($columns as $name => $column) {
                     if (!$row->has($name)) {
                         $row[$name] = $this->generateValue($column);
