@@ -46,6 +46,10 @@ class FixtureLoader
                 $row = Row::create($row);
                 assert($row instanceof Row);
 
+                if ($row->exists) {
+                    continue;
+                }
+
                 $row->map(function ($v, /** @noinspection PhpUnusedParameterInspection */ $k) {
                     if ($v instanceof ForeignValue) {
                         return $v->value();

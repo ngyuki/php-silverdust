@@ -251,7 +251,7 @@ class FixtureLoaderTest extends AbstractTestCase
      */
     public function through_row()
     {
-        self::exec('
+        self::exec("
             CREATE TABLE aaa (
                 a_id INT NOT NULL,
                 name VARCHAR (255) NOT NULL,
@@ -275,7 +275,7 @@ class FixtureLoaderTest extends AbstractTestCase
 
             ALTER TABLE bbb ADD FOREIGN KEY (a_id) REFERENCES aaa (a_id);
             ALTER TABLE ccc ADD FOREIGN KEY (a_id, b_id) REFERENCES bbb (a_id, b_id);
-        ');
+        ");
 
         $loader = (new FixtureLoaderBuilder($this->conn(), new Cache()))->create();
         $loader->load([
@@ -339,7 +339,7 @@ class FixtureLoaderTest extends AbstractTestCase
     /**
      * @test
      */
-    public function foreign_foreign_key_bug()
+    public function null_foreign_key_bug()
     {
         self::exec("
             CREATE TABLE aaa (
@@ -397,5 +397,71 @@ class FixtureLoaderTest extends AbstractTestCase
             [ 'a_id' => 10, 'b_id' => 100 ],
             [ 'a_id' => 20, 'b_id' => 200 ],
         ])));
+    }
+
+    /**
+     * @test
+     */
+    public function exists_foreign_foreign_key_bug()
+    {
+        self::exec("
+            CREATE TABLE aaa (
+                a_id INT NOT NULL,
+                str VARCHAR(10) NOT NULL,
+                PRIMARY KEY (a_id)
+            );
+            CREATE TABLE bbb (
+                b_id INT NOT NULL,
+                a_id INT NOT NULL,
+                str VARCHAR(10) NOT NULL,
+                PRIMARY KEY (b_id),
+                FOREIGN KEY (a_id) REFERENCES aaa (a_id)
+            );
+            CREATE TABLE ccc (
+                c_id INT NOT NULL,
+                b_id INT NOT NULL,
+                PRIMARY KEY (c_id),
+                FOREIGN KEY (b_id) REFERENCES bbb (b_id)
+            );
+            INSERT aaa VALUES (1, 'A');
+            INSERT aaa VALUES (10, 'X');
+            INSERT bbb VALUES (100, 10, 'Z');
+        ");
+
+        $loader = (new FixtureLoaderBuilder($this->conn(), new Cache()))->create();
+        $loader->load([
+            'ccc'  => [
+                [
+                    'c_id' => 1000,
+                    'b_id' => 100,
+                ],
+                [
+                    'bbb.str' => 'YYY',
+                    'bbb.aaa.a_id' => 999,
+                    'bbb.aaa.str' => 'ZZZ',
+                ],
+            ],
+        ]);
+
+        $rows = $this->all('aaa', ['str']);
+        $this->printWhenSingle($rows);
+        assertCount(3, $rows);
+        assertThat($rows, equalTo(array_replace_recursive($rows, [
+            [ 'a_id' => 1, 'str' => 'A' ],
+            [ 'a_id' => 10, 'str' => 'X' ],
+            [ 'str' => 'ZZZ' ],
+        ])));
+
+        $rows = $this->all('bbb', ['str']);
+        $this->printWhenSingle($rows);
+        assertCount(2, $rows);
+        assertThat($rows, equalTo(array_replace_recursive($rows, [
+            [ 'str' => 'YYY' ],
+            [ 'b_id' => 100, 'a_id' => 10, 'str' => 'Z' ],
+        ])));
+
+        $rows = $this->all('ccc', ['a_id', 'b_id']);
+        $this->printWhenSingle($rows);
+        assertCount(2, $rows);
     }
 }

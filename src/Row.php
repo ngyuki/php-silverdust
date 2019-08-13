@@ -5,6 +5,7 @@ class Row extends \ArrayObject
 {
     public $generated = false;
     public $entity = false;
+    public $exists = null;
 
     public static function create($row)
     {

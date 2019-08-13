@@ -72,6 +72,13 @@ class Generator
             return false;
         });
 
+        if ($foreignKeys && !$through && !$row->entity) {
+            $found = $this->query->fetch($table, $row->toArray());
+            if ($found) {
+                $row->exists = $found;
+                return $row;
+            }
+        }
         foreach ($foreignKeys as list($foreignTable, $references)) {
             $this->generateByForeignKey($table, $row, $foreignTable, $references, $through[$foreignTable] ?? []);
         }
