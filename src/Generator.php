@@ -167,8 +167,11 @@ class Generator
     private function findOnMemory(string $table, array $values)
     {
         foreach ($this->tables[$table] ?? [] as $index => $row) {
-            $ok = true;
             assert($row instanceof Row);
+            if (!$row->generated) {
+                continue;
+            }
+            $ok = true;
             foreach ($values as $name => $value) {
                 if ($row->has($name) && $value != $row[$name]) {
                     $ok = false;
