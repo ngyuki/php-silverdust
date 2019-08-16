@@ -24,11 +24,14 @@ class Row extends \ArrayObject
     {
         foreach ($arr as $key => $val) {
             $arr = explode('.', $key, 2);
-            if (count($arr) !== 2) {
-                $this[$key] = $val;
+            if (count($arr) === 2) {
+                $key = $arr[0];
+                $val = [$arr[1] => $val];
+            }
+            if (is_array($val)) {
+                $this->through[$key] = array_merge($this->through[$key] ?? [], $val);
             } else {
-                list($table, $column) = $arr;
-                $this->through[$table][$column] = $val;
+                $this[$key] = $val;
             }
         }
         return $this;
