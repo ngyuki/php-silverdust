@@ -1,6 +1,9 @@
 <?php
 namespace ngyuki\Silverdust;
 
+use Doctrine\DBAL\Schema\Column;
+use ngyuki\Silverdust\Value\ValueFactory;
+
 class Generator
 {
     /**
@@ -40,10 +43,34 @@ class Generator
             }
         }
 
-        $tables = $this->tables;
-        $this->tables = null;
+        $this->tables = array_reverse($this->schema->krsort($this->tables), true);
 
-        return array_reverse($this->schema->krsort($tables), true);
+        foreach ($this->tables as $table => $rows) {
+            $columns = $this->schema->columns($table);
+            foreach ($rows as $index => $row) {
+                $row = Row::create($row);
+                assert($row instanceof Row);
+
+                if ($row->exists) {
+                    continue;
+                }
+
+                $row->map(function ($v, /** @noinspection PhpUnusedParameterInspection */ $k) {
+                    if ($v instanceof ForeignValue) {
+                        return $v->value();
+                    }
+                    return $v;
+                });
+
+                foreach ($columns as $name => $column) {
+                    if (!$row->has($name)) {
+                        $row[$name] = $this->generateValue($column);
+                    }
+                }
+
+                $this->query->overwrite($table, $row->toArray());
+            }
+        }
     }
 
     private function generateRow(string $table, Row $row, bool $entry = false): Row
@@ -125,6 +152,15 @@ class Generator
             }
         }
         return $row;
+    }
+
+    private function generateValue(Column $column)
+    {
+        if (!$column->getNotnull()) {
+            return null;
+        }
+        $v = new ValueFactory();
+        return $v->value($column);
     }
 
     /**

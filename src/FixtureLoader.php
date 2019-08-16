@@ -1,9 +1,6 @@
 <?php
 namespace ngyuki\Silverdust;
 
-use Doctrine\DBAL\Schema\Column;
-use ngyuki\Silverdust\Value\ValueFactory;
-
 class FixtureLoader
 {
     /**
@@ -38,44 +35,7 @@ class FixtureLoader
 
     public function load(array $tables): self
     {
-        $tables = $this->generator->generate($tables);
-
-        foreach ($tables as $table => $rows) {
-            $columns = $this->schema->columns($table);
-            foreach ($rows as $index => $row) {
-                $row = Row::create($row);
-                assert($row instanceof Row);
-
-                if ($row->exists) {
-                    continue;
-                }
-
-                $row->map(function ($v, /** @noinspection PhpUnusedParameterInspection */ $k) {
-                    if ($v instanceof ForeignValue) {
-                        return $v->value();
-                    }
-                    return $v;
-                });
-
-                foreach ($columns as $name => $column) {
-                    if (!$row->has($name)) {
-                        $row[$name] = $this->generateValue($column);
-                    }
-                }
-
-                $this->query->overwrite($table, $row->toArray());
-            }
-        }
-
+        $this->generator->generate($tables);
         return $this;
-    }
-
-    private function generateValue(Column $column)
-    {
-        if (!$column->getNotnull()) {
-            return null;
-        }
-        $v = new ValueFactory();
-        return $v->value($column);
     }
 }
