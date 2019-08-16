@@ -33,13 +33,13 @@ class Generator
 
         foreach ($this->tables as $table => $rows) {
             foreach ($rows as $index => $row) {
-                $this->tables[$table][$index] = $row = Row::create($row);
+                $this->tables[$table][$index] = $row = Row::create($table, $row);
             }
         }
 
-        foreach ($this->tables as $table => $rows) {
+        foreach ($this->tables as $rows) {
             foreach ($rows as $index => $row) {
-                $this->generateRow($table, $row, true);
+                $this->generateRow($row, true);
             }
         }
 
@@ -48,7 +48,6 @@ class Generator
         foreach ($this->tables as $table => $rows) {
             $columns = $this->schema->columns($table);
             foreach ($rows as $index => $row) {
-                $row = Row::create($row);
                 assert($row instanceof Row);
 
                 if ($row->exists) {
@@ -73,7 +72,7 @@ class Generator
         }
     }
 
-    private function generateRow(string $table, Row $row, bool $entry = false): Row
+    private function generateRow(Row $row, bool $entry = false): Row
     {
         if ($row->generated) {
             return $row;
@@ -81,7 +80,7 @@ class Generator
         $row->generated = true;
 
         if (!$row->through && !$entry) {
-            $found = $this->query->fetch($table, $row->toArray());
+            $found = $this->query->fetch($row->table, $row->toArray());
             if ($found) {
                 $row->exists = $found;
                 $row->assign($found);
@@ -89,25 +88,20 @@ class Generator
             }
         }
 
-        $foreignKeys = $this->schema->foreignKeys($table);
-
-        $foreignTables = [];
-        foreach ($foreignKeys as list($foreignTable)) {
-            $foreignTables[$foreignTable] = $foreignTable;
-        }
-
+        $foreignKeys = $this->schema->foreignKeys($row->table);
         foreach ($foreignKeys as list($foreignTable, $references)) {
-            $this->generateByForeignKey($table, $row, $foreignTable, $references);
+            $this->generateByForeignKey($row, $foreignTable, $references);
         }
+
         return $row;
     }
 
-    private function generateByForeignKey(string $table, Row $row, string $foreignTable, array $references): Row
+    private function generateByForeignKey(Row $row, string $foreignTable, array $references): Row
     {
         $through = $row->through[$foreignTable] ?? [];
         if (!$through) {
             $nullable = false;
-            $columns = $this->schema->columns($table);
+            $columns = $this->schema->columns($row->table);
             foreach ($references as $local => $foreign) {
                 if ($row->has($local)) {
                     // ローカル側の外部キー参照元の値に NULL が指定されているなら参照先の行は生成不要
@@ -142,7 +136,8 @@ class Generator
             }
         }
         if ($foreignRow === null) {
-            $foreignRow = $this->generateRow($foreignTable, Row::create($foreignValues));
+            $foreignRow = Row::create($foreignTable, $foreignValues);
+            $foreignRow = $this->generateRow($foreignRow);
             $this->tables[$foreignTable][] = $foreignRow;
         }
 

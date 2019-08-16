@@ -3,16 +3,19 @@ namespace ngyuki\Silverdust;
 
 class Row extends \ArrayObject
 {
+    public $table;
     public $generated = false;
     public $exists = null;
     public $through = [];
 
-    public static function create($row)
+    public static function create($table, $row)
     {
         if ($row instanceof Row) {
             return $row;
         }
-        return (new Row())->assign($row);
+        $row = (new Row())->assign($row);
+        $row->table = $table;
+        return $row;
     }
 
     public function has($name)
