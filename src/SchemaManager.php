@@ -71,7 +71,7 @@ class SchemaManager
 
     /**
      * @param string $table
-     * @return array [$foreignTable => [$localColumn => $foreignColumn, ...], ...]
+     * @return array [$foreignTable, [$localColumn => $foreignColumn, ...], ...]
      */
     public function foreignKeys(string $table): array
     {
@@ -124,6 +124,11 @@ class SchemaManager
             }
         }
         return $ret;
+    }
+
+    public function ksort(array $tables)
+    {
+        return array_reverse($this->krsort($tables), true);
     }
 
     private function visit(\ArrayObject $sorted, \ArrayObject $visit, string $table)

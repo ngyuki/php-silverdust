@@ -17,9 +17,9 @@ class Generator
     private $schema;
 
     /**
-     * @var array|null
+     * @var Row[][]|null
      */
-    private $tables;
+    private $tables = [];
 
     public function __construct(Query $query, SchemaManager $schema)
     {
@@ -29,62 +29,149 @@ class Generator
 
     public function generate(array $tables)
     {
-        $this->tables = $this->schema->krsort($tables);
+        $this->tables = [];
 
-        foreach ($this->tables as $table => $rows) {
-            foreach ($rows as $index => $row) {
-                $this->tables[$table][$index] = $row = Row::create($table, $row);
+        $tables = $this->schema->ksort($tables);
+        foreach ($tables as $table => $rows) {
+            foreach ($rows as $row) {
+                $row = $this->prepareRow($table, $row);
+                $row->entry = true;
+                $this->tables[$table][] = $row;
             }
         }
 
+        $this->tables = $this->schema->krsort($this->tables);
         foreach ($this->tables as $rows) {
-            foreach ($rows as $index => $row) {
-                $this->generateRow($row, true);
+            foreach ($rows as $row) {
+                $this->applyForeign($row);
             }
         }
 
-        $this->tables = array_reverse($this->schema->krsort($this->tables), true);
-
-        foreach ($this->tables as $table => $rows) {
-            $columns = $this->schema->columns($table);
-            foreach ($rows as $index => $row) {
-                assert($row instanceof Row);
-
-                if ($row->exists) {
-                    continue;
-                }
-
-                $row->map(function ($v, /** @noinspection PhpUnusedParameterInspection */ $k) {
-                    if ($v instanceof ForeignValue) {
-                        return $v->value();
-                    }
-                    return $v;
-                });
-
-                foreach ($columns as $name => $column) {
-                    if (!$row->has($name)) {
-                        $row[$name] = $this->generateValue($column);
-                    }
-                }
-
-                $this->query->overwrite($table, $row->toArray());
+        $this->tables = $this->schema->ksort($this->tables);
+        foreach ($this->tables as $rows) {
+            foreach ($rows as $row) {
+                $this->generateRow($row);
             }
         }
     }
 
-    private function generateRow(Row $row, bool $entry = false): Row
+    public function prepareRow(string $table, array $arr): Row
     {
-        if ($row->generated) {
-            return $row;
-        }
-        $row->generated = true;
+        $row = new Row($table);
+        $throughTables = [];
 
-        if (!$row->through && !$entry) {
+        foreach ($arr as $key => $val) {
+            $arr = explode('.', $key, 2);
+            if (count($arr) === 2) {
+                $key = $arr[0];
+                $val = [$arr[1] => $val];
+            }
+            if (is_array($val)) {
+                $throughTables[$key] = array_merge($throughTables[$key] ?? [], $val);
+            } else {
+                $row[$key] = $val;
+            }
+        }
+
+        $foreignTables = [];
+        foreach ($this->schema->foreignKeys($table) as list($foreignTable, $references)) {
+            $foreignTables[$foreignTable][] = $references;
+        }
+
+        foreach ($throughTables as $throughTable => $throughValues) {
+
+            if (!array_key_exists($throughTable, $foreignTables)) {
+                throw new \RuntimeException("missing foreign reference $table -> $throughTable");
+            }
+
+            foreach ($foreignTables[$throughTable] as $references) {
+                foreach ($references as $local => $foreign) {
+                    if (array_key_exists($foreign, $throughValues) && !$row->has($local)) {
+                        $row[$local] = $throughValues[$foreign];
+                    } elseif (!array_key_exists($foreign, $throughValues) && $row->has($local)) {
+                        $throughValues[$foreign] = $row[$local];
+                    }
+                }
+            }
+
+            $throughRow = $this->findOnMemory($throughTable, $throughValues);
+            if (!$throughRow) {
+                $throughRow = $this->prepareRow($throughTable, $throughValues);
+                $this->tables[$throughTable][] = $throughRow;
+            }
+
+            foreach ($foreignTables[$throughTable] as $references) {
+                foreach ($references as $local => $foreign) {
+                    if (!$row->has($local)) {
+                        $row[$local] = new ForeignValue($throughRow, $foreign);
+                    }
+                }
+            }
+        }
+        return $row;
+    }
+
+    public function applyForeign(Row $row)
+    {
+        $columns = $this->schema->columns($row->table);
+        $foreignKeys = $this->schema->foreignKeys($row->table);
+        foreach ($foreignKeys as list($foreignTable, $references)) {
+
+            $nullable = false;
+            foreach ($references as $local => $foreign) {
+                if ($row->has($local) && ($row[$local] === null)) {
+                    $nullable = true;
+                } elseif (!$row->has($local) && !$columns[$local]->getNotnull()) {
+                    $nullable = true;
+                }
+            }
+            if ($nullable) {
+                continue;
+            }
+
+            $foreignValues = [];
+            foreach ($references as $local => $foreign) {
+                if ($row->has($local)) {
+                    $foreignValues[$foreign] = $row[$local];
+                }
+            }
+
+            $foreignRow = $this->findOnMemory($foreignTable, $foreignValues);
+            if ($foreignRow) {
+                foreach ($references as $local => $foreign) {
+                    if ($row->has($local) && !$foreignRow->has($foreign)) {
+                        $value = $row[$local];
+                        if (is_scalar($value)) {
+                            $foreignRow[$foreign] = $value;
+                        }
+                    } elseif (!$row->has($local) && $foreignRow->has($foreign)) {
+                        $value = $foreignRow[$foreign];
+                        if (is_scalar($value)) {
+                            $row[$local] = $value;
+                        } else {
+                            $row[$local] = new ForeignValue($foreignRow, $foreign);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private function generateRow(Row $row)
+    {
+        foreach ($row as $column => $value) {
+            if ($value instanceof ForeignValue) {
+                $this->generateRow($value->row);
+                $row[$column] = $value->row[$value->column];
+            }
+        }
+
+        if (!$row->entry) {
             $found = $this->query->fetch($row->table, $row->toArray());
             if ($found) {
-                $row->exists = $found;
                 $row->assign($found);
-                return $row;
+                $row->exists = true;
+                return;
             }
         }
 
@@ -93,60 +180,53 @@ class Generator
             $this->generateByForeignKey($row, $foreignTable, $references);
         }
 
-        return $row;
+        $columns = $this->schema->columns($row->table);
+        foreach ($columns as $name => $column) {
+            if (!$row->has($name)) {
+                $row[$name] = $this->generateValue($column);
+            }
+        }
+        $this->query->overwrite($row->table, $row->toArray());
     }
 
-    private function generateByForeignKey(Row $row, string $foreignTable, array $references): Row
+    private function generateByForeignKey(Row $row, $foreignTable, $references)
     {
-        $through = $row->through[$foreignTable] ?? [];
-        if (!$through) {
-            $nullable = false;
-            $columns = $this->schema->columns($row->table);
-            foreach ($references as $local => $foreign) {
-                if ($row->has($local)) {
-                    // ローカル側の外部キー参照元の値に NULL が指定されているなら参照先の行は生成不要
-                    if ($row[$local] === null) {
-                        $nullable = true;
-                    }
-                } else {
-                    // ローカル側の外部キー参照元の列が NULL 許可なら参照先の行は生成不要
-                    if (!$columns[$local]->getNotnull()) {
-                        $nullable = true;
-                    }
-                }
+        $nullable = false;
+        $columns = $this->schema->columns($row->table);
+        foreach ($references as $local => $foreign) {
+            if ($row->has($local) && ($row[$local] === null)) {
+                $nullable = true;
+            } elseif (!$row->has($local) && !$columns[$local]->getNotnull()) {
+                $nullable = true;
+                $row[$local] = null;
             }
-            if ($nullable) {
-                return $row;
-            }
+        }
+        if ($nullable) {
+            return;
         }
 
         $foreignValues = [];
         foreach ($references as $local => $foreign) {
-            if ($row->has($local) && is_scalar($row[$local])) {
+            if ($row->has($local)) {
                 $foreignValues[$foreign] = $row[$local];
             }
         }
-        $foreignValues += $through;
 
-        $foreignRow = null;
-        if (!$through) {
-            $foreignRow = $this->findOnMemory($foreignTable, $foreignValues);
-            if ($foreignRow) {
-                $foreignRow = $foreignRow->assign($foreignValues);
-            }
-        }
+        $foreignRow = $this->findOnMemory($foreignTable, $foreignValues);
         if ($foreignRow === null) {
-            $foreignRow = Row::create($foreignTable, $foreignValues);
-            $foreignRow = $this->generateRow($foreignRow);
+            $foreignRow = new Row($foreignTable, $foreignValues);
             $this->tables[$foreignTable][] = $foreignRow;
+        }
+        if (!$foreignRow->exists) {
+            $foreignRow->assign($foreignValues);
+            $this->generateRow($foreignRow);;
         }
 
         foreach ($references as $local => $foreign) {
             if (!$row->has($local)) {
-                $row[$local] = new ForeignValue($foreignRow, $foreign);
+                $row[$local] = $foreignRow[$foreign];
             }
         }
-        return $row;
     }
 
     private function generateValue(Column $column)
@@ -168,15 +248,16 @@ class Generator
     {
         foreach ($this->tables[$table] ?? [] as $index => $row) {
             assert($row instanceof Row);
-            if (!$row->generated) {
-                continue;
-            }
             $ok = true;
             foreach ($values as $name => $value) {
-                if ($row->has($name) && $value != $row[$name]) {
-                    $ok = false;
-                    break;
+                if (!$row->has($name)) {
+                    continue;
                 }
+                if (is_scalar($row[$name]) && is_scalar($value) && $value == $row[$name]) {
+                    continue;
+                }
+                $ok = false;
+                break;
             }
             if ($ok) {
                 return $row;

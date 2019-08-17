@@ -11,16 +11,15 @@ class ForeignValue
     /**
      * @var string
      */
-    private $column;
+    public $column;
 
+    /**
+     * @param Row $row
+     * @param string $column
+     */
     public function __construct(Row $row, string $column)
     {
         $this->row = $row;
         $this->column = $column;
-    }
-
-    public function value()
-    {
-        return $this->row[$this->column];
     }
 }

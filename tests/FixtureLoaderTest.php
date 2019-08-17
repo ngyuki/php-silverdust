@@ -454,10 +454,9 @@ class FixtureLoaderTest extends AbstractTestCase
 
         $rows = $this->all('bbb', ['str']);
         $this->printWhenSingle($rows);
-        assertCount(2, $rows);
+        assertCount(1, $rows);
         assertThat($rows, equalTo(array_replace_recursive($rows, [
-            [ 'str' => 'YYY' ],
-            [ 'b_id' => 100, 'a_id' => 10, 'str' => 'Z' ],
+            [ 'b_id' => 100, 'a_id' => 999, 'str' => 'YYY' ],
         ])));
 
         $rows = $this->all('ccc', ['a_id', 'b_id']);

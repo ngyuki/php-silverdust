@@ -4,18 +4,13 @@ namespace ngyuki\Silverdust;
 class Row extends \ArrayObject
 {
     public $table;
-    public $generated = false;
+    public $entry = false;
     public $exists = null;
-    public $through = [];
 
-    public static function create($table, $row)
+    public function __construct($table, $input = array())
     {
-        if ($row instanceof Row) {
-            return $row;
-        }
-        $row = (new Row())->assign($row);
-        $row->table = $table;
-        return $row;
+        parent::__construct($input);
+        $this->table = $table;
     }
 
     public function has($name)
@@ -26,24 +21,7 @@ class Row extends \ArrayObject
     public function assign($arr)
     {
         foreach ($arr as $key => $val) {
-            $arr = explode('.', $key, 2);
-            if (count($arr) === 2) {
-                $key = $arr[0];
-                $val = [$arr[1] => $val];
-            }
-            if (is_array($val)) {
-                $this->through[$key] = array_merge($this->through[$key] ?? [], $val);
-            } else {
-                $this[$key] = $val;
-            }
-        }
-        return $this;
-    }
-
-    public function map($callback)
-    {
-        foreach ($this as $key => $val) {
-            $this[$key] = $callback($val, $key);
+            $this[$key] = $val;
         }
         return $this;
     }
